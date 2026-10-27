@@ -1,0 +1,651 @@
+{
+  "info": {
+    "name": "Order Service - Observability Lab",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "mgmtUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "orderId",
+      "value": "1"
+    },
+    {
+      "key": "failOrderId",
+      "value": "2"
+    }
+  ],
+  "item": [
+    {
+      "name": "Orders (port 8080)",
+      "item": [
+        {
+          "name": "1. Create order (201)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"c1\",\n  \"productId\": \"p1\",\n  \"quantity\": 2,\n  \"totalAmount\": 49.99\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const o = pm.response.json();",
+                  "pm.test('status is PENDING', () => pm.expect(o.status).to.eql('PENDING'));",
+                  "pm.test('Location header present', () => pm.response.to.have.header('Location'));",
+                  "pm.collectionVariables.set('orderId', o.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Create order - validation error (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"\",\n  \"productId\": \"p1\",\n  \"quantity\": 0,\n  \"totalAmount\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Get order by id (200)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{orderId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('id matches', () => pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get('orderId'))));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Get order - not found (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/999999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "999999"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 Not Found', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. List orders (default page)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('returns an array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6. List orders - filter by status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders?status=PENDING&page=0&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING"
+                },
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7. Confirm order (200)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{orderId}}",
+                "confirm"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('status is CONFIRMED', () => pm.expect(pm.response.json().status).to.eql('CONFIRMED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8. Confirm again - conflict (409)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{orderId}}",
+                "confirm"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409 Conflict', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "9. Fail a CONFIRMED order - conflict (409)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/fail",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{orderId}}",
+                "fail"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"payment declined\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409 Conflict', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10. Create second order (for fail flow)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"c1\",\n  \"productId\": \"p1\",\n  \"quantity\": 2,\n  \"totalAmount\": 49.99\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('failOrderId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11. Fail order (200)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{failOrderId}}/fail",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{failOrderId}}",
+                "fail"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"payment declined\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const o = pm.response.json();",
+                  "pm.test('status FAILED with reason', () => { pm.expect(o.status).to.eql('FAILED'); pm.expect(o.failureReason).to.eql('payment declined'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "12. Fail order - blank reason (400)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{failOrderId}}/fail",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{failOrderId}}",
+                "fail"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Actuator (port 8081)",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{mgmtUrl}}/actuator/health",
+              "host": [
+                "{{mgmtUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health - liveness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{mgmtUrl}}/actuator/health/liveness",
+              "host": [
+                "{{mgmtUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health",
+                "liveness"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health - readiness (includes DB)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{mgmtUrl}}/actuator/health/readiness",
+              "host": [
+                "{{mgmtUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health",
+                "readiness"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{mgmtUrl}}/actuator/info",
+              "host": [
+                "{{mgmtUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "info"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Prometheus metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{mgmtUrl}}/actuator/prometheus",
+              "host": [
+                "{{mgmtUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "prometheus"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('has HTTP server metrics', () => pm.expect(pm.response.text()).to.include('http_server_requests_seconds_count'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Actuator on public port (should be 404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 - not exposed on 8080', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

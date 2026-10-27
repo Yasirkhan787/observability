@@ -1,0 +1,33 @@
+# =====================================================================
+# Tempo config (single-binary mode, local disk). Good for learning only.
+# In production: use object storage (S3/GCS) and separate components.
+# =====================================================================
+
+stream_over_http_enabled: true   # lets Grafana stream search results as they arrive
+
+server:
+  http_listen_port: 3200         # the HTTP API Grafana talks to
+
+distributor:                     # the "front door" that receives spans
+  receivers:
+    otlp:                        # Tempo understands OTLP natively
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317 # the collector sends traces here (tempo:4317)
+        http:
+          endpoint: 0.0.0.0:4318
+
+ingester:
+  max_block_duration: 5m         # write data to disk blocks every 5 minutes at most (default is longer; short = traces searchable sooner)
+
+compactor:
+  compaction:
+    block_retention: 1h          # delete trace data older than 1 hour (keeps your disk small while learning)
+
+storage:
+  trace:
+    backend: local               # store on the container's local filesystem
+    wal:
+      path: /var/tempo/wal       # write-ahead log: newest spans, before they become blocks
+    local:
+      path: /var/tempo/blocks    # finished trace blocks

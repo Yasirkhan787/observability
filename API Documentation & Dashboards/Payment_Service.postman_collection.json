@@ -1,0 +1,524 @@
+{
+  "info": {
+    "name": "Payment Service - Observability Lab",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "paymentUrl",
+      "value": "http://localhost:8082"
+    },
+    {
+      "key": "paymentMgmtUrl",
+      "value": "http://localhost:8083"
+    },
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    }
+  ],
+  "item": [
+    {
+      "name": "Payment API (port 8082)",
+      "item": [
+        {
+          "name": "1. Approve payment (normal amount)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{paymentUrl}}/payments",
+              "host": [
+                "{{paymentUrl}}"
+              ],
+              "path": [
+                "payments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": 1,\n  \"customerId\": \"c1\",\n  \"amount\": 49.99\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "payment-service fails ~20% of calls ON PURPOSE (payment.simulation.failure-rate: 0.2), so 503 is an accepted result. Set failure-rate to 0.0 for clean runs."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = pm.response.code;",
+                  "pm.test('200 OK or simulated 503', () => pm.expect([200, 503]).to.include(code));",
+                  "if (code === 200) {",
+                  "  const b = pm.response.json();",
+                  "  pm.test('APPROVED', () => pm.expect(b.status).to.eql('APPROVED'));",
+                  "  pm.test('has paymentId', () => pm.expect(b.paymentId).to.be.a('string').and.not.empty);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Decline payment (amount over 5000)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{paymentUrl}}/payments",
+              "host": [
+                "{{paymentUrl}}"
+              ],
+              "path": [
+                "payments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": 2,\n  \"customerId\": \"c1\",\n  \"amount\": 9000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "payment-service fails ~20% of calls ON PURPOSE (payment.simulation.failure-rate: 0.2), so 503 is an accepted result. Set failure-rate to 0.0 for clean runs."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = pm.response.code;",
+                  "pm.test('200 OK or simulated 503', () => pm.expect([200, 503]).to.include(code));",
+                  "if (code === 200) {",
+                  "  const b = pm.response.json();",
+                  "  pm.test('DECLINED (a normal 200, not an error)', () => pm.expect(b.status).to.eql('DECLINED'));",
+                  "  pm.test('reason given', () => pm.expect(b.reason).to.eql('Amount over limit'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Validation error - missing fields (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{paymentUrl}}/payments",
+              "host": [
+                "{{paymentUrl}}"
+              ],
+              "path": [
+                "payments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": null,\n  \"customerId\": \"\",\n  \"amount\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Validation error - negative amount (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{paymentUrl}}/payments",
+              "host": [
+                "{{paymentUrl}}"
+              ],
+              "path": [
+                "payments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": 3,\n  \"customerId\": \"c1\",\n  \"amount\": -5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. Wrong method - GET /payments (405)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{paymentUrl}}/payments",
+              "host": [
+                "{{paymentUrl}}"
+              ],
+              "path": [
+                "payments"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('405 Method Not Allowed', () => pm.response.to.have.status(405));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6. Unknown path (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{paymentUrl}}/payments/123",
+              "host": [
+                "{{paymentUrl}}"
+              ],
+              "path": [
+                "payments",
+                "123"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 Not Found', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Actuator (port 8083)",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{paymentMgmtUrl}}/actuator/health",
+              "host": [
+                "{{paymentMgmtUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('status UP', () => pm.expect(pm.response.json().status).to.eql('UP'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health - liveness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{paymentMgmtUrl}}/actuator/health/liveness",
+              "host": [
+                "{{paymentMgmtUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health",
+                "liveness"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health - readiness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{paymentMgmtUrl}}/actuator/health/readiness",
+              "host": [
+                "{{paymentMgmtUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health",
+                "readiness"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Actuator on public port (should be 404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{paymentUrl}}/actuator/health",
+              "host": [
+                "{{paymentUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 - not exposed on 8082', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Checkout through order-service (port 8080)",
+      "item": [
+        {
+          "name": "Checkout - approved path",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "checkout"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"c1\",\n  \"productId\": \"p1\",\n  \"quantity\": 2,\n  \"totalAmount\": 49.99\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "order-service calls payment-service. Look at the trace in Tempo: 2 services. payment-service fails ~20% of calls ON PURPOSE (payment.simulation.failure-rate: 0.2), so 503 is an accepted result. Set failure-rate to 0.0 for clean runs."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = pm.response.code;",
+                  "pm.test('201 Created or 503 (payment service failed)', () => pm.expect([201, 503]).to.include(code));",
+                  "if (code === 201) {",
+                  "  const o = pm.response.json();",
+                  "  pm.test('order CONFIRMED', () => pm.expect(o.status).to.eql('CONFIRMED'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Checkout - declined (amount over 5000)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "checkout"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"c1\",\n  \"productId\": \"p1\",\n  \"quantity\": 1,\n  \"totalAmount\": 9000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Business decline: order is saved as FAILED with the decline reason, API still answers 201. payment-service fails ~20% of calls ON PURPOSE (payment.simulation.failure-rate: 0.2), so 503 is an accepted result. Set failure-rate to 0.0 for clean runs."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = pm.response.code;",
+                  "pm.test('201 Created or 503 (payment service failed)', () => pm.expect([201, 503]).to.include(code));",
+                  "if (code === 201) {",
+                  "  const o = pm.response.json();",
+                  "  pm.test('order FAILED', () => pm.expect(o.status).to.eql('FAILED'));",
+                  "  pm.test('reason mentions decline', () => pm.expect(o.failureReason).to.include('declined'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Checkout - validation error (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "checkout"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"\",\n  \"productId\": \"p1\",\n  \"quantity\": 0,\n  \"totalAmount\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

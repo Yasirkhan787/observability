@@ -1,0 +1,47 @@
+# =====================================================================
+# OTel Collector config for v3
+# Same 3 parts as v2: receivers (in) -> processors (middle) -> exporters (out)
+# Change from v2: traces now go to Tempo instead of only the debug log.
+# =====================================================================
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318 # the Spring app pushes metrics and traces here
+
+processors:
+  batch: {} # send data in groups instead of one item at a time
+
+exporters:
+  prometheus: # metrics -> a page Prometheus can scrape
+    endpoint: 0.0.0.0:8889
+    resource_to_telemetry_conversion:
+      enabled: true # copy service.name etc. into metric labels
+
+  otlp/tempo: # NEW: traces -> Tempo ("otlp/tempo" = the otlp exporter, instance named "tempo")
+    endpoint: tempo:4317 # container name + Tempo's OTLP gRPC port
+    tls:
+      insecure: true # no TLS between containers on a local network; never do this over the internet
+
+  debug: # also print a summary to the collector log, to confirm data is arriving
+    verbosity: basic
+
+service:
+  pipelines:
+    metrics: # METRICS: app -> collector -> Prometheus
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]
+
+    traces: # TRACES: app -> collector -> Tempo (+ debug log)
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/tempo, debug]
+
+    # logs:                      # LOGS: added in the next step (Loki)
+    #   receivers: [otlp]
+    #   processors: [batch]
+    #   exporters: [otlphttp/loki]

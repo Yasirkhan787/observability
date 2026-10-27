@@ -1,0 +1,40 @@
+# =====================================================================
+# Loki config: single process, local disk. Good for learning only.
+# In production: object storage (S3/GCS) and separate components.
+# =====================================================================
+
+auth_enabled: false              # no multi-tenant login; every log goes to the one default tenant
+
+server:
+  http_listen_port: 3100         # Grafana queries here; the collector pushes to /otlp on this port
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki             # base folder inside the container (the loki-data volume is mounted here)
+  replication_factor: 1          # one copy only (single node)
+  ring:
+    kvstore:
+      store: inmemory            # no etcd/consul needed
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks   # the compressed log data
+      rules_directory: /loki/rules
+
+schema_config:
+  configs:
+    - from: 2024-01-01           # this schema applies to logs from this date onward
+      store: tsdb                # index type. REQUIRED for OTLP structured metadata
+      object_store: filesystem
+      schema: v13                # REQUIRED: v13 or newer for structured metadata
+      index:
+        prefix: index_
+        period: 24h              # one index per day
+
+storage_config:
+  tsdb_shipper:
+    active_index_directory: /loki/tsdb-index
+    cache_location: /loki/tsdb-cache
+
+limits_config:
+  allow_structured_metadata: true   # REQUIRED: OTLP puts trace_id, span_id etc. in "structured metadata"
+                                    # without this Loki rejects the logs sent by the collector

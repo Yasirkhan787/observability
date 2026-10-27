@@ -1,0 +1,11 @@
+# Traces data source. NEW in v3.
+apiVersion: 1
+
+datasources:
+  - name: Tempo
+    type: tempo
+    uid: tempo                     # fixed id, so later steps (logs <-> traces links) can refer to it
+    access: proxy                  # Grafana's server calls Tempo, not your browser
+    url: http://tempo:3200         # Tempo's HTTP API (container name + port)
+    # Links to Prometheus (service map) and Loki (logs) are added later,
+    # once Loki exists and we give Prometheus a fixed uid.

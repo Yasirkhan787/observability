@@ -1,0 +1,52 @@
+# =====================================================================
+# OTel Collector config for v4
+# receivers (in) -> processors (middle) -> exporters (out), joined by pipelines.
+# Change from v3: a LOGS pipeline that sends logs to Loki.
+# =====================================================================
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318   # the Spring apps push metrics, traces and logs here
+
+processors:
+  batch: {}                      # send data in groups instead of one item at a time
+
+exporters:
+  prometheus:                    # metrics -> a page Prometheus can scrape
+    endpoint: 0.0.0.0:8889
+    resource_to_telemetry_conversion:
+      enabled: true              # copy service.name etc. into metric labels
+                                 # (the collector prints a "deprecated" warning for this line; it still works)
+
+  otlp/tempo:                    # traces -> Tempo
+    endpoint: tempo:4317
+    tls:
+      insecure: true             # plain HTTP between containers on a local network only
+
+  otlphttp/loki:                 # NEW: logs -> Loki over OTLP
+    endpoint: http://loki:3100/otlp   # give the BASE path only: the exporter adds /v1/logs itself
+                                      # (Loki's real route is /otlp/v1/logs)
+
+  debug:                         # print a short summary to the collector log, to confirm data arrives
+    verbosity: basic
+
+service:
+  pipelines:
+    metrics:                     # METRICS: app -> collector -> Prometheus
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]
+
+    traces:                      # TRACES: app -> collector -> Tempo (+ debug)
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/tempo, debug]
+
+    logs:                        # NEW - LOGS: app -> collector -> Loki (+ debug)
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/loki, debug]

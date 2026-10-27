@@ -1,0 +1,24 @@
+# Traces data source, now with a link from a trace to its LOGS.
+apiVersion: 1
+
+datasources:
+  - name: Tempo
+    type: tempo
+    uid: tempo                     # fixed id: the Loki data source points back to it
+    access: proxy
+    url: http://tempo:3200
+    jsonData:
+      tracesToLogsV2:              # adds a "Logs for this span" button in the trace view
+        datasourceUid: loki        # must match the uid in loki-datasource.yml
+        spanStartTimeShift: '-5m'  # search logs from 5 minutes before the span...
+        spanEndTimeShift: '5m'     # ...to 5 minutes after it (clocks and batching are never exact)
+        tags:                      # which span attribute becomes which Loki label
+          - key: 'service.name'    # attribute on the span (resource attribute)
+            value: 'service_name'  # label name in Loki (Loki turns "." into "_")
+        filterByTraceID: false     # off on purpose: the custom query below filters by trace id itself
+        filterBySpanID: false
+        customQuery: true          # use our own LogQL instead of the automatic one
+        # {${__tags}}  becomes  {service_name="order-service"}  (from the tags mapping above)
+        # trace_id="..." filters on STRUCTURED METADATA, where the OpenTelemetry appender puts the trace id
+        # "$$" is how a provisioning file writes a literal "$" (Grafana would otherwise treat ${...} as an env variable)
+        query: '{$${__tags}} | trace_id="$${__trace.traceId}"'

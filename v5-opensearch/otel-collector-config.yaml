@@ -1,0 +1,54 @@
+# =====================================================================
+# OTel Collector config for v5
+# Change from v4: the LOGS pipeline now exports to OpenSearch instead of Loki.
+# =====================================================================
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+
+exporters:
+  prometheus:                    # metrics -> page for Prometheus
+    endpoint: 0.0.0.0:8889
+    resource_to_telemetry_conversion:
+      enabled: true
+
+  otlp/tempo:                    # traces -> Tempo
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  opensearch:                    # NEW: logs -> OpenSearch (instead of otlphttp/loki)
+    http:
+      endpoint: http://opensearch:9200      # container name + port; plain http because security is off
+    logs_index: otel-logs                   # index name prefix
+    logs_index_time_format: yyyy.MM.dd      # one index per day: otel-logs-2026.10.24
+    mapping:
+      mode: ss4o                            # OpenSearch's "Simple Schema for Observability" field layout (the default)
+
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]
+
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/tempo, debug]
+
+    logs:                        # LOGS: app -> collector -> OpenSearch (+ debug)
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [opensearch, debug]

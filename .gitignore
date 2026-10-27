@@ -1,0 +1,26 @@
+# Java and Maven
+target/
+**/target/
+*.class
+*.iml
+HELP.md
+
+# IDEs
+.idea/
+.vscode/
+
+# Local environment and operating-system files
+.env
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local container data
+docker-data/
+volumes/
+**/mysql-data/
+**/prometheus-data/
+**/grafana-data/
+**/tempo-data/
+**/loki-data/
+**/opensearch-data/

@@ -1,0 +1,111 @@
+# =====================================================================
+# v4 - Logs with Grafana Loki (metrics + traces + logs)
+#
+#   Spring apps (your PC)   --OTLP push to localhost:4318-->  otel-collector
+#
+#   otel-collector  metrics --> :8889 page  <-- prometheus scrapes
+#                   traces  --> tempo
+#                   logs    --> loki           (NEW in v4)
+#
+#   grafana reads: Prometheus (metrics), Tempo (traces), Loki (logs)
+#
+# Before starting, stop v3:   cd ../v3-tempo && docker compose down     (NOT "down -v")
+# Start:  docker compose up -d        Stop: docker compose down
+# =====================================================================
+
+# Same project name as the v3 folder, so Docker REUSES the v3 volumes
+# (v3-tempo_grafana-data, v3-tempo_prometheus-data) and your Grafana dashboards survive.
+# Without this line, a new folder name would create empty volumes.
+name: v3-tempo
+
+services:
+
+  # ------------------------------------------------------------------
+  # OTel Collector: receives metrics, traces AND logs, and routes each one.
+  # ------------------------------------------------------------------
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP -> the Spring apps push metrics, traces and logs here
+      - "8889:8889"   # metrics page for Prometheus (http://localhost:8889/metrics)
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    depends_on:
+      - tempo
+      - loki          # NEW: loki must exist before the collector sends logs to it
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------
+  # Tempo: stores traces. Unchanged from v3.
+  # ------------------------------------------------------------------
+  tempo:
+    image: grafana/tempo:2.9.5
+    container_name: tempo
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./tempo.yaml:/etc/tempo/tempo.yaml:ro
+    ports:
+      - "3200:3200"   # Tempo HTTP API (Grafana queries it here)
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------
+  # Loki: stores logs and answers Grafana's log queries. NEW in v4.
+  # ------------------------------------------------------------------
+  loki:
+    image: grafana/loki:3.4.2          # pinned on purpose: the config file format changes between major versions
+    container_name: loki
+    command: ["-config.file=/etc/loki/loki.yaml"]   # which config file Loki reads
+    volumes:
+      - ./loki.yaml:/etc/loki/loki.yaml:ro
+      - loki-data:/loki                # named volume: logs survive "docker compose down"
+                                       # if Loki logs "permission denied" on /loki, remove this line
+                                       # (logs then live inside the container and are lost on "down")
+    ports:
+      - "3100:3100"   # Loki HTTP API. Check readiness: http://localhost:3100/ready
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------
+  # Prometheus: unchanged. Scrapes the collector's :8889 page.
+  # ------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
+    depends_on:
+      - otel-collector
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------
+  # Grafana: now THREE data sources (Prometheus, Tempo, Loki).
+  # ------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin   # change outside local dev
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro   # data sources are created from these files
+    depends_on:
+      - prometheus
+      - tempo
+      - loki
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  loki-data:

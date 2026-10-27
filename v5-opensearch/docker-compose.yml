@@ -1,0 +1,146 @@
+# =====================================================================
+# v5 - Logs in OpenSearch (instead of Loki). Metrics and traces unchanged.
+#
+#   Spring apps --OTLP--> otel-collector
+#       metrics --> :8889 page  <-- prometheus scrapes
+#       traces  --> tempo
+#       logs    --> opensearch           (CHANGED: was loki)
+#
+#   grafana reads: Prometheus (metrics), Tempo (traces), OpenSearch (logs)
+#   opensearch-dashboards: OpenSearch's own UI for the same logs (optional, uses extra RAM)
+#
+# Before starting, stop v4:   cd ../v4-loki && docker compose down      (NOT "down -v")
+# Start:  docker compose up -d --remove-orphans        Stop: docker compose down
+# Needs roughly 2 GB of free RAM for OpenSearch + Dashboards.
+# =====================================================================
+
+# Same project name as v3/v4, so Docker REUSES the existing volumes
+# (Grafana dashboards, Prometheus data). "--remove-orphans" removes the old loki container.
+name: v3-tempo
+
+services:
+
+  # ------------------------------------------------------------------
+  # OpenSearch: stores logs and answers searches. NEW.
+  # Single node, security OFF: for local learning only. Never do this on a shared network.
+  # ------------------------------------------------------------------
+  opensearch:
+    image: opensearchproject/opensearch:2.19.1   # pinned on purpose; if this tag is not found, try the major tag "2"
+    container_name: opensearch
+    environment:
+      - discovery.type=single-node               # one node, no cluster setup (also relaxes startup memory checks)
+      - DISABLE_SECURITY_PLUGIN=true             # no login, plain http: easiest for learning
+      - DISABLE_INSTALL_DEMO_CONFIG=true         # skip the demo certificates and the admin-password requirement
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m   # JVM memory: 512 MB min and max. Raise to 1g if it is slow
+      - bootstrap.memory_lock=true               # keep the JVM memory out of swap
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - "9200:9200"   # REST API. Check: http://localhost:9200
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data   # named volume: logs survive "docker compose down"
+    healthcheck:                                 # the collector waits until OpenSearch answers
+      test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------
+  # OpenSearch Dashboards: OpenSearch's own web UI (Discover, index patterns). Optional.
+  # ------------------------------------------------------------------
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:2.19.1   # keep the same version as OpenSearch
+    container_name: opensearch-dashboards
+    environment:
+      - 'OPENSEARCH_HOSTS=["http://opensearch:9200"]'   # where to find OpenSearch (container name)
+      - DISABLE_SECURITY_DASHBOARDS_PLUGIN=true         # matches the security-off OpenSearch above
+    ports:
+      - "5601:5601"   # UI: http://localhost:5601
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------
+  # OTel Collector: now sends LOGS to OpenSearch.
+  # ------------------------------------------------------------------
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP -> the Spring apps push metrics, traces and logs here
+      - "8889:8889"   # metrics page for Prometheus
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    depends_on:
+      tempo:
+        condition: service_started
+      opensearch:
+        condition: service_healthy   # do not start sending logs until OpenSearch is ready
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------
+  # Tempo: unchanged.
+  # ------------------------------------------------------------------
+  tempo:
+    image: grafana/tempo:2.9.5
+    container_name: tempo
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./tempo.yaml:/etc/tempo/tempo.yaml:ro
+    ports:
+      - "3200:3200"
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------
+  # Prometheus: unchanged.
+  # ------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
+    depends_on:
+      - otel-collector
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------
+  # Grafana: installs the OpenSearch data source plugin on startup.
+  # ------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-opensearch-datasource   # downloads the plugin at startup (needs internet)
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+      - tempo
+      - opensearch
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  opensearch-data:     # NEW

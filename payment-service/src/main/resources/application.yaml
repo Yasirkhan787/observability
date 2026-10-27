@@ -1,0 +1,67 @@
+spring:
+  application:
+    name: payment-service                  # identity in metrics and traces (shown as the service in Tempo)
+
+server:
+  port: 8082                               # order-service uses 8080, so no clash
+  shutdown: graceful                       # finish running requests on stop
+
+# ---- Fake gateway behaviour (read by SimulationProperties) ----
+payment:
+  simulation:
+    min-delay-ms: 50                       # fastest answer
+    max-delay-ms: 200                      # slowest normal answer; raise to e.g. 1500 to create a slow span
+    failure-rate: 0.2                      # 0.0 = never fails; set 0.2 for 20% HTTP 503 (error spans)
+    decline-above: 5000                    # amounts above this come back DECLINED (a normal 200 response)
+
+management:
+  server:
+    port: 8083                             # actuator on its own port (order-service uses 8081)
+
+  endpoints:
+    access:
+      default: none                        # every endpoint OFF unless allowed below
+    web:
+      base-path: /actuator
+      exposure:
+        include: health,info
+        exclude: heapdump,env,beans,configprops,mappings,shutdown
+
+  endpoint:
+    health:
+      access: read-only
+      probes:
+        enabled: true                      # /health/liveness and /health/readiness
+    info:
+      access: read-only
+
+  # ---- OpenTelemetry: the app PUSHES data to the Collector (same Collector as order-service) ----
+  otlp:
+    metrics:
+      export:
+        url: http://localhost:4318/v1/metrics
+        step: 5s                           # push every 5 seconds
+        base-time-unit: seconds            # durations in seconds, like order-service
+  opentelemetry:
+    resource-attributes:
+      '[service.name]': ${spring.application.name}   # the name Tempo and Prometheus show for this service
+      '[deployment.environment]': local
+    tracing:
+      export:
+        otlp:
+          endpoint: http://localhost:4318/v1/traces
+    logging:                                          # NEW
+      export:
+        otlp:
+          endpoint: http://localhost:4318/v1/logs     # where logs are pushed (the collector)
+
+  tracing:
+    sampling:
+      probability: 1.0                     # trace 100% of requests (learning only)
+
+  metrics:
+    tags:
+      application: ${spring.application.name}   # same "application" label your dashboard filters on
+    distribution:
+      percentiles-histogram:
+        '[http.server.requests]': true     # latency buckets for p95/p99

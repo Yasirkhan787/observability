@@ -1,0 +1,47 @@
+# =====================================================================
+# OpenTelemetry Collector config
+# A collector always has the same 3 parts, joined by "pipelines":
+#   receivers  = how data comes IN
+#   processors = what to do with it on the way
+#   exporters  = where data goes OUT
+# =====================================================================
+
+receivers:
+  otlp: # OTLP = the OpenTelemetry protocol your Spring app speaks
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317 # listen on all interfaces inside the container (gRPC)
+      http:
+        endpoint: 0.0.0.0:4318 # listen for HTTP; your app's config points here (.../v1/metrics, .../v1/traces)
+
+processors:
+  batch: {} # group data into batches before sending: fewer, bigger, cheaper writes
+
+exporters:
+  prometheus: # publishes metrics in Prometheus text format so Prometheus can scrape them
+    endpoint: 0.0.0.0:8889 # Prometheus scrapes http://otel-collector:8889/metrics
+    resource_to_telemetry_conversion:
+      enabled:
+        true # copy resource attributes (service.name, deployment.environment) into labels
+        # without this, those values would only appear in a separate "target_info" metric
+
+  debug: # prints what the collector receives into its own log (docker compose logs otel-collector)
+    verbosity: basic # "basic" = short summaries; use "detailed" to see every span (very noisy)
+
+service:
+  pipelines:
+    metrics: # METRICS path:  app -> collector -> Prometheus
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]
+
+    traces: # TRACES path:  app -> collector -> log only (no trace UI yet)
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug] # later: replace/add Tempo or Jaeger here to SEE traces
+
+
+    # logs:                     # LOGS path: add later (OpenSearch step)
+    #   receivers: [otlp]
+    #   processors: [batch]
+    #   exporters: [debug]

@@ -1,0 +1,11 @@
+# Grafana reads every file in this folder at startup and creates the data sources it describes.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy # Grafana's server calls Prometheus (not your browser)
+    url: http://prometheus:9090 # container service name, NOT localhost (localhost would mean the Grafana container)
+    isDefault: true # used automatically by new panels
+    jsonData:
+      timeInterval: 5s # NEW: tells Grafana the scrape interval, so rate() windows match (5s scrape)

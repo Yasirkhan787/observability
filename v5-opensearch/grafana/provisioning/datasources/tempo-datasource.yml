@@ -1,0 +1,9 @@
+# Traces data source. Same as v3: no "logs for this span" link yet (that is configured for OpenSearch later).
+apiVersion: 1
+
+datasources:
+  - name: Tempo
+    type: tempo
+    uid: tempo
+    access: proxy
+    url: http://tempo:3200

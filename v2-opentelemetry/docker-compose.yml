@@ -1,0 +1,82 @@
+# =====================================================================
+# v2 - OpenTelemetry pipeline
+#
+#   Spring app (runs on your PC, port 8080)
+#        |  pushes metrics + traces via OTLP to localhost:4318
+#        v
+#   otel-collector  (this file)  -- exposes metrics on :8889
+#        ^
+#        |  Prometheus PULLS (scrapes) every 5s
+#   prometheus      (this file)
+#        ^
+#        |  Grafana queries
+#   grafana         (this file)
+#
+# Start:  docker compose up -d      Stop: docker compose down
+# =====================================================================
+
+services:
+
+  # ------------------------------------------------------------------
+  # OTel Collector: the "post office" between your app and Prometheus.
+  # Your app pushes data to it; it converts/forwards the data.
+  # NEW in v2.
+  # ------------------------------------------------------------------
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest   # "contrib" build includes the Prometheus exporter
+    container_name: otel-collector
+    ports:
+      - "4317:4317"   # OTLP over gRPC (another way apps can send data)
+      - "4318:4318"   # OTLP over HTTP -> your Spring app pushes here (localhost:4318)
+      - "8889:8889"   # metrics page for Prometheus; open http://localhost:8889/metrics to inspect
+    volumes:
+      # mount our config file over the collector's default config
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro   # :ro = read-only inside the container
+    restart: unless-stopped   # start again after a crash or PC reboot (unless you stopped it manually)
+
+  # ------------------------------------------------------------------
+  # Prometheus: stores metrics as time series.
+  # Changed in v2: it now scrapes the COLLECTOR, not the Spring app.
+  # ------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"   # Prometheus web UI: http://localhost:9090
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro   # our scrape config
+      - prometheus-data:/prometheus                          # named volume: keeps metrics after restart
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml   # which config file to load
+      - --storage.tsdb.retention.time=7d               # delete data older than 7 days
+      - --web.enable-lifecycle                         # allows reload without restart: curl.exe -X POST localhost:9090/-/reload
+    # NOTE: the old "extra_hosts: host.docker.internal" line is gone on purpose.
+    # Prometheus no longer talks to your PC; it talks to the collector container by service name.
+    depends_on:
+      - otel-collector   # start the collector first
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------
+  # Grafana: draws dashboards. Stores no metrics itself; it only asks Prometheus.
+  # Unchanged from v1 (same volumes, so your saved dashboards are kept).
+  # ------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"   # Grafana UI: http://localhost:3000
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin       # login user
+      - GF_SECURITY_ADMIN_PASSWORD=admin   # login password (change outside local dev)
+    volumes:
+      - grafana-data:/var/lib/grafana                           # named volume: keeps dashboards after restart
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro     # auto-creates the Prometheus data source on startup
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+# Named volumes: Docker stores these outside your project folder.
+# "docker compose down" keeps them; "docker compose down -v" DELETES them (all stored data).
+volumes:
+  prometheus-data:
+  grafana-data:

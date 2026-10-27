@@ -1,0 +1,18 @@
+# Logs data source for OpenSearch. Needs the plugin installed by GF_INSTALL_PLUGINS in docker-compose.yml.
+apiVersion: 1
+
+datasources:
+  - name: OpenSearch
+    type: grafana-opensearch-datasource
+    uid: opensearch
+    access: proxy
+    url: http://opensearch:9200 # container name + port
+    jsonData:
+      database: "otel-logs-*" # which indices to search (the daily indices created by the collector)
+      flavor: opensearch # OpenSearch, not Elasticsearch
+      version: 2.19.1 # must match the OpenSearch image version
+      timeField: "@timestamp" # field used for the time axis
+      logMessageField: body # field shown as the log text (SS4O stores the message in "body")
+      logLevelField: severity.text.keyword # field used for INFO / WARN / ERROR colouring
+      # If these three field names are wrong, look at one real document (see the README steps)
+      # and correct them here, then run: docker compose restart grafana

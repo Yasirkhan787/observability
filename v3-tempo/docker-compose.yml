@@ -1,0 +1,98 @@
+# =====================================================================
+# v3 - Traces with Grafana Tempo
+#
+#   Spring app (your PC, :8080)
+#        |  pushes metrics + traces via OTLP to localhost:4318
+#        v
+#   otel-collector ──metrics──► (exposes :8889) ◄── prometheus scrapes
+#        |
+#        └─────traces (OTLP)──► tempo (stores traces)
+#
+#   grafana reads: Prometheus (metrics) and Tempo (traces)
+#   Loki (logs) is added in the next step.
+#
+# Before starting: stop the v2 stack (same ports 9090/3000/8889/4318):
+#     cd ../v2-opentelemetry && docker compose down        (NOT "down -v")
+# Start:  docker compose up -d        Stop: docker compose down
+# =====================================================================
+
+services:
+
+  # ------------------------------------------------------------------
+  # OTel Collector: receives everything from the app and routes it.
+  # Metrics -> Prometheus exporter, traces -> Tempo.
+  # ------------------------------------------------------------------
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP -> the Spring app pushes here
+      - "8889:8889"   # metrics page, scraped by Prometheus (http://localhost:8889/metrics)
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    depends_on:
+      - tempo         # tempo must exist before the collector tries to send traces to it
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------
+  # Tempo: stores traces and answers Grafana's trace queries. NEW in v3.
+  # Runs as a single container ("single binary" mode), good for learning.
+  # ------------------------------------------------------------------
+  tempo:
+    image: grafana/tempo:2.9.5     # pinned on purpose: "latest" could be a newer major version with a different config format
+    container_name: tempo
+    command: ["-config.file=/etc/tempo/tempo.yaml"]   # tells Tempo which config file to read
+    volumes:
+      - ./tempo.yaml:/etc/tempo/tempo.yaml:ro
+    ports:
+      - "3200:3200"   # Tempo HTTP API; Grafana queries it here. Check readiness: http://localhost:3200/ready
+    # No volume for trace data on purpose: traces live inside the container and are
+    # lost on "docker compose down". Fine for learning, and avoids file-permission problems.
+    # NOTE: Tempo's own OTLP ports (4317/4318) are NOT published to your PC,
+    # because the collector already uses those ports on the host. The collector reaches Tempo by name: tempo:4317.
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------
+  # Prometheus: unchanged from v2. Scrapes the collector's :8889 page.
+  # ------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
+    depends_on:
+      - otel-collector
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------
+  # Grafana: now has TWO data sources provisioned (Prometheus + Tempo).
+  # ------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin   # change outside local dev
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro   # data sources are created from these files
+    depends_on:
+      - prometheus
+      - tempo
+    restart: unless-stopped
+
+# Volume names get a prefix from the FOLDER name (v3-tempo_...), so v3 starts with
+# fresh storage: you will need to import your Grafana dashboard JSON again.
+volumes:
+  prometheus-data:
+  grafana-data:

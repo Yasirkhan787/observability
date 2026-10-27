@@ -1,0 +1,17 @@
+# Logs data source, now with a link from a log line to its TRACE.
+apiVersion: 1
+
+datasources:
+  - name: Loki
+    type: loki
+    uid: loki                      # fixed id: the Tempo data source points to it
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      derivedFields:               # turns a field of the log line into a clickable link
+        - name: TraceID            # label of the link shown in Grafana
+          datasourceUid: tempo     # open it in the Tempo data source (must match tempo's uid)
+          matcherType: label       # read the value from a label / structured metadata field, NOT from the log text
+          matcherRegex: trace_id   # for matcherType "label" this is the FIELD NAME (the OTLP appender stores trace_id there)
+          url: '$${__value.raw}'   # pass the field's value to Tempo as the trace id to open
+          urlDisplayLabel: Open trace

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- Spring Boot's normal logging setup: console pattern, colours, log levels.
+         It defines the CONSOLE appender we reuse below. -->
+    <include resource="org/springframework/boot/logging/logback/base.xml" />
+
+    <!-- NEW: sends every log line to the OpenTelemetry SDK, which exports it over OTLP to the
+    collector.
+         The log record automatically carries the current traceId and spanId. -->
+    <appender name="OTEL"
+        class="io.opentelemetry.instrumentation.logback.appender.v1_0.OpenTelemetryAppender">
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE" />   <!-- keep printing to the console as before -->
+        <appender-ref ref="OTEL" />      <!-- ALSO send to the collector -->
+    </root>
+
+</configuration>
